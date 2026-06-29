@@ -1,0 +1,9 @@
+{
+  "name": "lab-core",
+  "version": "1.0.0",
+  "description": "Core computer science algorithms and structural patterns library",
+  "main": "lab1_2.js",
+  "type": "module",
+  "author": "Kovryha Denys IM-54",
+  "license": "MIT"
+}
