@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# IDE / editor files
+.vs/
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs.txt
+service.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Coverage / build output
+coverage/
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Local test files
+regression-test.mjs
+test-*.mjs

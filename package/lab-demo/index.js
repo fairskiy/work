@@ -1,19 +1,27 @@
 import readline from 'readline';
-import { fibonacciGenerator } from '../lab-core/generator.js';
-import { asyncFibonacciGenerator } from '../lab-core/interator.js';
-import { memoize } from '../lab-core/memoize.js';
-import { BiDirectionalPriorityQueue, Mode } from '../lab-core/quene.js'; 
-import { asyncMapCallback, asyncMapPromise, asyncMapAbortable } from '../lab-core/mapper.js';
-import { generateTelemetry, batchStream } from '../lab-core/batch.js';
-import { runSmartHubSimulation } from '../lab-core/evenmitter.js';
-import { ApiProxy, JwtStrategy } from '../lab-core/auth.js';
-import { log } from '../lab-core/logger.js';
+
+import {
+    fibonacciGenerator,
+    asyncFibonacciGenerator,
+    memoize,
+    BiDirectionalPriorityQueue,
+    Mode,
+    asyncMapCallback,
+    asyncMapPromise,
+    asyncMapAbortable,
+    generateTelemetry,
+    batchStream,
+    runSmartHubSimulation,
+    ApiProxy,
+    JwtStrategy,
+    log
+} from "lab-core";
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
-async function runLab1_2() {
-  console.log("\n--- 1 та 2 лабораторні: синхронні та асинхронні генератори ---");
+async function runLab1() {
+  console.log("\n--- 1 лабораторна: синхронні та асинхронні генератори ---");
   console.log("1. Перші 5 чисел синхронного Фібоначчі:");
   const gen = fibonacciGenerator();
   for (let i = 0; i < 5; i++) console.log(`   Значення: ${gen.next().value}`);
@@ -104,7 +112,7 @@ function showMenu() {
   console.log("\n=======================================================");
   console.log("               Курсова робота     ");
   console.log("=======================================================");
-  console.log("1. Лаби 1-2: Синхронні / Асинхронні генератори");
+  console.log("1. Лаба 1: Синхронні / Асинхронні генератори");
   console.log("2. Лаба 3: Мемоізація функцій та стратегії кешування");
   console.log("3. Лаба 4: Двонаправлена черга з пріоритетами");
   console.log("4. Лаба 5: Асинхронні мапери (Promises & AbortSignal)");
@@ -126,7 +134,7 @@ function showMenu() {
 
     try {
       switch (formattedChoice) {
-        case '1': await runLab1_2(); break;
+        case '1': await runLab1(); break;
         case '2': runLab3(); break;
         case '3': runLab4(); break;
         case '4': await runLab5(); break;
@@ -134,8 +142,11 @@ function showMenu() {
         case '6': runLab7(); break;
         case '7': await runLab8(); break;
         case '8': await runLab9(); break;
-        default:
-      
+        default: console.log("Невірний вибір. Будь ласка, оберіть номер від 0 до 8."); break;
+      }
+    } catch (err) {
+        console.error("Сталася помилка під час виконання лабораторної:", err);
+    }
 
     await sleep(1500);
     showMenu(); // Повертаємося в меню тільки після завершення роботи лаби
