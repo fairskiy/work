@@ -1,8 +1,41 @@
-export function memoize(fn, { limit = Infinity, strategy = 'LRU', ttl = 60000, customEviction } = {}) {
+function createDefaultKeyResolver() {
+  const objectIds = new WeakMap();
+  const symbolIds = new Map();
+  let nextId = 1;
+  const getId = (storage, value) => {
+    if (!storage.has(value)) {
+      storage.set(value, nextId++);
+    }
+    return storage.get(value);
+  };
+
+  const tokenFor = (value) => {
+    if (value === null) return 'null';
+    const type = typeof value;
+    if (type === 'number') {
+      if (Number.isNaN(value)) return 'number:NaN';
+      if (Object.is(value, -0)) return 'number:-0';
+      if (value === Infinity) return 'number:Infinity';
+      if (value === -Infinity) return 'number:-Infinity';
+      return `number:${value}`; 
+    }
+    if (type === 'string') return `string:${JSON.stringify(value)}`;
+    if (type === 'boolean') return `boolean:${value}`;
+    if (type === 'undefined') return 'undefined';
+    if (type === 'bigint') return `bigint:${value.toString()}`;
+    if (type === 'symbol') return `symbol:${getId(symbolIds, value)}`;
+    if (type === 'function' || type === 'object') return `object:${getId(objectIds, value)}`;
+    return `${type}:${String(value)}`;
+  };
+  return (args) => args.map(tokenFor).map(token => `${token.length}:${token}`).join('|');
+}
+
+export function memoize(fn, { limit = Infinity, strategy = 'LRU', ttl = 60000, customEviction, keyResolver} = {}) {
   const cache = new Map();
+  const resolveKey = keyResolver || createDefaultKeyResolver();
 
   return function(...args) {
-    const key = JSON.stringify(args);
+    const key = resolveKey(args);
     const now = Date.now();
 
     if (cache.has(key)) {
@@ -12,7 +45,10 @@ export function memoize(fn, { limit = Infinity, strategy = 'LRU', ttl = 60000, c
         cache.delete(key);
       } else {
         entry.count++;
-        if (strategy === 'LRU') cache.set(key, cache.get(key) && (cache.delete(key), entry));
+        if (strategy === 'LRU') {
+          cache.delete(key);
+          cache.set(key, entry);
+        }
         return entry.value;
       }
     }
