@@ -2,7 +2,7 @@ import readline from 'readline';
 
 import {
     fibonacciGenerator,
-    asyncFibonacciGenerator,
+    consumeWithTimeout,
     memoize,
     BiDirectionalPriorityQueue,
     Mode,
@@ -26,10 +26,15 @@ async function runLab1() {
   const gen = fibonacciGenerator();
   for (let i = 0; i < 5; i++) console.log(`   Значення: ${gen.next().value}`);
 
-  console.log("\n2. Асинхронний генератор (5 ітерацій, затримка 200мс):");
-  for await (const num of asyncFibonacciGenerator(5, 200)) {
-    console.log(`   [Async] Отримано: ${num}`);
-  }
+  console.log("\n2. Споживання довільного ітератора протягом 0.01 секунд:");
+  const iterator = fibonacciGenerator();
+  let shown = 0;
+  const processedCount = await consumeWithTimeout(iterator, 0.01, value => {
+    if (shown < 5) console.log(`   Processed: ${value}`);
+    shown++;
+  });
+  console.log(`   Загальна кількість оброблених елементів: ${processedCount}`);
+
 }
 
 function runLab3() {

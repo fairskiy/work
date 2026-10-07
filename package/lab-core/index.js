@@ -1,5 +1,5 @@
 export { fibonacciGenerator } from './lab1_generator.js';
-export { asyncFibonacciGenerator } from './lab1_iterator.js';
+export { consumeWithTimeout } from './lab1_iterator.js';
 export { memoize } from './lab3_memoize.js';
 export { BiDirectionalPriorityQueue, Mode } from './lab4_queue.js';
 export { asyncMapCallback, asyncMapPromise, asyncMapAbortable } from './lab5_mapper.js';
