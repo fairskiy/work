@@ -33,24 +33,31 @@ function createDefaultKeyResolver() {
 export function memoize(fn, { limit = Infinity, strategy = 'LRU', ttl = 60000, customEviction, keyResolver} = {}) {
   const cache = new Map();
   const resolveKey = keyResolver || createDefaultKeyResolver();
+  const clearExpired = (now) => {
+    if (strategy !== 'TTL') {
+      return;
+    }
+    for (const [key, entry] of cache) {
+      if (now - entry.timestamp >= ttl) {
+        cache.delete(key);
+      }
+    }
+  };
 
   return function(...args) {
     const key = resolveKey(args);
     const now = Date.now();
+    clearExpired(now);
 
     if (cache.has(key)) {
       const entry = cache.get(key);
 
-      if (strategy === 'TTL' && now - entry.timestamp > ttl) {
-        cache.delete(key);
-      } else {
         entry.count++;
         if (strategy === 'LRU') {
           cache.delete(key);
           cache.set(key, entry);
         }
         return entry.value;
-      }
     }
 
     const result = fn(...args);
