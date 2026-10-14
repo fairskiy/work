@@ -31,8 +31,29 @@ function createDefaultKeyResolver() {
 }
 
 export function memoize(fn, { limit = Infinity, strategy = 'LRU', ttl = 60000, customEviction, keyResolver} = {}) {
+  if (typeof fn !== 'function') {
+    throw new TypeError('First argument must be a function');
+  }
+  const validStrategies = new Set(['LRU', 'LFU', 'TTL', 'CUSTOM']);
+  if (!validStrategies.has(strategy)) {
+    throw new TypeError(`Invalid strategy: ${strategy}. Valid strategies are: ${Array.from(validStrategies).join(', ')}`);
+  }
+  if (limit !== Infinity && (!Number.isInteger(limit) || limit < 0)) {
+    throw new TypeError('Limit must be a non-negative integer or Infinity');
+  }
+  if (strategy === 'TTL' && (typeof ttl !== 'number' || ttl <= 0)) {
+    throw new TypeError('TTL must be a positive number when using TTL strategy');
+  }
+  if (strategy === 'CUSTOM' && typeof customEviction !== 'function') {
+    throw new TypeError('customEviction must be a function when using CUSTOM strategy');
+  }
+  if (keyResolver !== undefined && typeof keyResolver !== 'function') {
+    throw new TypeError('keyResolver must be a function if provided');
+  }
+
   const cache = new Map();
   const resolveKey = keyResolver || createDefaultKeyResolver();
+ 
   const clearExpired = (now) => {
     if (strategy !== 'TTL') {
       return;
@@ -44,11 +65,40 @@ export function memoize(fn, { limit = Infinity, strategy = 'LRU', ttl = 60000, c
     }
   };
 
+  const evictOne = () => { 
+    if(cache.size === 0) return;
+    if(strategy === 'CUSTOM') {
+      const sizeBefore = cache.size;
+      const keyToEvict = customEviction(cache);
+      if(keyToEvict !== undefined) {
+        cache.delete(keyToEvict);
+      }
+      if(sizeBefore > cache.size) return;
+    }
+    if(strategy === 'LFU') {
+      let victim;
+      let minCount = Infinity;
+      for (const [key, entry] of cache) {
+        if (entry.count < minCount) {
+          minCount = entry.count;
+          victim = key;
+        }
+      }
+      cache.delete(victim);
+      return;
+    }
+    const firstKey = cache.keys().next().value;
+    cache.delete(firstKey);
+  };
+
   return function(...args) {
+    if (limit === 0) {
+      return fn.apply(this, args);
+    }
     const key = resolveKey(args);
     const now = Date.now();
     clearExpired(now);
-
+    
     if (cache.has(key)) {
       const entry = cache.get(key);
 
@@ -58,22 +108,13 @@ export function memoize(fn, { limit = Infinity, strategy = 'LRU', ttl = 60000, c
           cache.set(key, entry);
         }
         return entry.value;
-    }
+    }    
 
-    const result = fn(...args);
+    const result = fn.apply(this, args);
 
-    if (cache.size >= limit) {
-      if (strategy === 'CUSTOM' && typeof customEviction === 'function') {
-        customEviction(cache);
-      } else {
-        let victim = cache.keys().next().value;
-
-        if (strategy === 'LFU') {
-          let min = Infinity;
-          for (const [k, e] of cache) if (e.count < min) { min = e.count; victim = k; }
-        }
-        
-        cache.delete(victim);
+    if (limit !== Infinity) {
+      while (cache.size >= limit) {
+        evictOne();
       }
     }
 

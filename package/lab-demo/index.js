@@ -37,18 +37,62 @@ async function runLab1() {
 
 }
 
-function runLab3() {
-  console.log("\n--- лабораторна 3: мемоізація та кешування ---");
-  const slowFib = (n) => (n <= 1 ? n : slowFib(n - 1) + slowFib(n - 2));
-  const fastFib = memoize(slowFib, { limit: 10, strategy: 'LRU' });
+async function runLab3() {
+  console.log('\n--- лабораторна 3: мемоізація та кешування ---');
+  let calls = 0;
+  const square = (n) => {
+      calls++;
+      return n * n;
+  };
 
-  console.time("  Обчислення з нуля slowFib(35)");
-  fastFib(35);
-  console.timeEnd("  Обчислення з нуля slowFib(35)");
+  const lru = memoize(
+      square,
+      {
+        limit: 2,
+        strategy: 'LRU'
+      }
+  );
+  lru(2);
+  lru(3);
+  lru(2);
+  lru(4);
+  console.log(`LRU: function calls = ${calls}`);
 
-  console.time("  Отримання з кешу fastFib(35)");
-  fastFib(35);
-  console.timeEnd("  Отримання з кешу fastFib(35)");
+  calls = 0;
+  const lfu = memoize(square, { limit: 2, strategy: 'LFU' });
+  lfu(2);
+  lfu(2);
+  lfu(3);
+  lfu(4);
+
+  console.log(`LFU: function calls = ${calls}`);
+
+  calls = 0;
+  const ttlMemo = memoize(square, { limit: 2, strategy: 'TTL', ttl: 20 });
+  ttlMemo(5);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  ttlMemo(5);
+  console.log(`TTL: function calls = ${calls}`);
+
+  calls = 0;
+  const custom = memoize(square, { limit: 2, strategy: 'CUSTOM', 
+    customEviction: cache => cache.keys().next().value});
+  custom(6);
+  custom(7);
+  custom(8);
+  custom(6);
+
+  console.log(`CUSTOM: function calls = ${calls}`);
+
+  let keyCalls = 0;
+  const identify = memoize(value => {
+    keyCalls++; 
+    return String(value);
+  });
+  identify(null);
+  identify(NaN);
+  identify(null);
+  console.log(`Safe keys: ${keyCalls === 2 ? 'PASS' : 'FAIL'}`);
 }
 
 function runLab4() {
@@ -140,7 +184,7 @@ function showMenu() {
     try {
       switch (formattedChoice) {
         case '1': await runLab1(); break;
-        case '2': runLab3(); break;
+        case '2': await runLab3(); break;
         case '3': runLab4(); break;
         case '4': await runLab5(); break;
         case '5': await runLab6(); break;
