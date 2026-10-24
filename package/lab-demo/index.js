@@ -126,28 +126,88 @@ function runLab4() {
 
 async function runLab5() {
   console.log("\n--- лабораторна 5: асинхронні мапери колекцій ---");
-  const asyncWorker = (item, cb) => setTimeout(() => cb(null, item * 10), 300);
+
+  const asyncWorker = (item, cb) => {
+    const timer = setTimeout(() => cb(null, item * 10), 100);
+    return () => clearTimeout(timer);
+  };
+
+  await new Promise((resolve, reject) => {
+    asyncMapCallback([1, 2, 3], asyncWorker, (err, result) => {
+      if (err) return reject(err);
+      console.log("Результат Callback-мапера:", result);
+      resolve();
+    });
+  });
 
   const resPromise = await asyncMapPromise([1, 2, 3], asyncWorker);
-  console.log("   Результат Promise-мапера:", resPromise);
+  console.log("Результат Promise-мапера:", resPromise);
 
-  console.log("   Запуск Abortable-мапера із негайним скасуванням...");
+  let completedAfterAbort = 0;
+  let clearedOnAbort = 0;
+
+  const abortableWorker = (item, cb) => {
+    const timer = setTimeout(() => {
+      completedAfterAbort++;
+      cb(null, item * 10);
+    }, 200);
+
+    return () => {
+      clearedOnAbort++;
+      clearTimeout(timer);
+    };
+  };
+
+  console.log("Запуск Abortable-мапера і скасування під час роботи...");
+
   const controller = new AbortController();
-  controller.abort();
+
+  const operation = asyncMapAbortable(
+    [1, 2, 3],
+    abortableWorker,
+    controller.signal
+  );
+
+  setTimeout(() => controller.abort(), 20);
+
   try {
-    await asyncMapAbortable([1, 2, 3], asyncWorker, controller.signal);
+    await operation;
   } catch (err) {
-    console.log("   ✔ Перехоплено очікувану помилку скасування:", err.name);
+    if (err.name !== 'AbortError') throw err;
+    console.log("Перехоплено очікувану помилку:", err.name);
   }
+
+  await new Promise(resolve => setTimeout(resolve, 220));
+
+  console.log("Очищено таймерів:", clearedOnAbort);
+  console.log("Worker-ів завершилось після abort:", completedAfterAbort);
 }
 
 async function runLab6() {
   console.log("\n--- лабораторна 6: батчинг телеметрії ---");
   const batchIterator = batchStream(generateTelemetry(), 3);
-  console.log("   Зчитуємо перші 2 батчі по 3 елементи:");
-  for (let i = 1; i <= 2; i++) {
-    const { value: batch } = await batchIterator.next();
-    console.log(`   Батч #${i}:`, batch);
+  console.log("Зчитуємо перші 2 батчі по 3 елементи:");
+
+  try {
+    for (let i = 1; i <= 2; i++) {
+      const { value: batch } = await batchIterator.next();
+      console.log(`Батч #${i}:`, batch);
+    }
+  } finally {
+    await batchIterator.return();
+  }
+
+  async function* failingProducer() {
+    yield 1;
+    throw new Error('Producer failed');
+  }
+
+  try {
+    for await (const batch of batchStream(failingProducer(), 1)) {
+      console.log('Тестовий batch:', batch);
+    }
+  } catch (err) {
+    console.log('Помилка producer:', err.message);
   }
 }
 

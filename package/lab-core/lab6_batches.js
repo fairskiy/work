@@ -9,6 +9,9 @@ export async function* generateTelemetry() {
 }
 
 export async function* batchStream(iterator, batchSize) {
+  if (!Number.isInteger(batchSize) || batchSize <= 0) {
+    throw new RangeError('batchSize must be a positive integer');
+  }
   let batch = [];
   for await (const item of iterator) {
     if (batch.push(item) === batchSize) {
