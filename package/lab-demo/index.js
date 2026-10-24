@@ -101,10 +101,27 @@ function runLab4() {
   queue.enqueue("Task Low", 10);
   queue.enqueue("Task High", 50);
   queue.enqueue("Task Critical", 100);
+  queue.enqueue("Task Medium", 30);
 
-  console.log(`   HIGHEST елемент: ${queue.peek(Mode.HIGHEST)}`);
-  console.log(`   Вилучаємо HIGHEST: ${queue.dequeue(Mode.HIGHEST)}`);
-  console.log(`   Новий HIGHEST елемент: ${queue.peek(Mode.HIGHEST)}`);
+
+  console.log(`HIGHEST елемент: ${queue.peek(Mode.HIGHEST)}`);
+  console.log(`LOWEST елемент: ${queue.peek(Mode.LOWEST)}`);
+  console.log(`OLDEST елемент: ${queue.peek(Mode.OLDEST)}`);
+  console.log(`NEWEST елемент: ${queue.peek(Mode.NEWEST)}`);
+  
+  console.log("\nВидалення елементів:");
+
+  console.log(`HIGHEST елемент: ${queue.dequeue(Mode.HIGHEST)}`);
+  console.log(`LOWEST елемент: ${queue.dequeue(Mode.LOWEST)}`);
+  console.log(`OLDEST елемент: ${queue.dequeue(Mode.OLDEST)}`);
+  console.log(`NEWEST елемент: ${queue.dequeue(Mode.NEWEST)}`);
+
+  console.log(`Залишилось елементів: ${queue.size}`);
+  try {
+    queue.peek("unknown");
+  } catch (err) {
+    console.log(`Перевірка режиму: ${err.name}`);
+  }
 }
 
 async function runLab5() {
