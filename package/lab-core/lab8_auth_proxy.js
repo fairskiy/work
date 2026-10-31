@@ -1,72 +1,107 @@
-class RateLimiter {
-  constructor(limitPerSecond) {
-    this.minInterval = 1000 / limitPerSecond;
-    this.lastTime = 0;
+function checkClient(client) {
+  if (!client || typeof client.request !== 'function') {
+    throw new TypeError('client must implement request()');
   }
+}
 
-  async waitForTurn() {
-    const wait = Math.max(0, this.lastTime + this.minInterval - Date.now());
-    this.lastTime = Date.now() + wait;
-    if (wait > 0) {
-      console.log(`  [Rate Limiter] Waiting ${wait}ms...`);
-      await new Promise(res => setTimeout(res, wait));
+export class AuthProxy {
+  constructor(client, strategy, refreshProvider = null) {
+    checkClient(client);
+    if (!strategy || typeof strategy.applyAuth !== 'function') {
+      throw new TypeError('strategy must implement applyAuth()');
     }
-  }
-}
-
-export class JwtStrategy {
-  constructor(token) { this.token = token; }
-  applyAuth(headers) { headers.set('Authorization', `Bearer ${this.token}`); }
-  updateToken(newToken) { this.token = newToken; }
-}
-
-export class ApiProxy {
-  constructor(strategy, rateLimit = 5) {
+    if (refreshProvider !== null && typeof refreshProvider !== 'function') {
+      throw new TypeError('refreshProvider must be a function');
+    }
+    this.client = client;
     this.strategy = strategy;
-    this.limiter = new RateLimiter(rateLimit);
+    this.refreshProvider = refreshProvider;
     this.refreshPromise = null;
   }
 
-  async refresh() {
-    console.log('  🔄 [Proxy] Token expired. Fetching a new one...');
-    await new Promise(res => setTimeout(res, 1000));
-    this.strategy.updateToken?.("new_fresh_token_123");
-    console.log('  ✅ [Proxy] Token updated!');
+  setStrategy(strategy) {
+    if (!strategy || typeof strategy.applyAuth !== 'function') {
+      throw new TypeError('strategy must implement applyAuth()');
+    }
+    this.strategy = strategy;
   }
 
-  _getOptions(baseOptions) {
-    const headers = new Headers(baseOptions.headers || {});
+  _withAuth(request) {
+    const headers = new Headers(request.headers || {});
     this.strategy.applyAuth(headers);
-    return { ...baseOptions, headers };
+    return { ...request, headers };
   }
 
-  async request(url, options = {}) {
-    await this.limiter.waitForTurn();
-
-    if (this.refreshPromise) {
-      console.log(`  [Proxy] ${url} is waiting for token update...`);
-      await this.refreshPromise;
+  async refresh() {
+    if (!this.refreshProvider) return false;
+    if (!this.refreshPromise) {
+      const strategy = this.strategy;
+      this.refreshPromise = Promise.resolve().then(() => this.refreshProvider()).then(token => {
+        if (typeof strategy.updateToken !== 'function') {
+          throw new TypeError('strategy must implement updateToken() for refresh');
+        }
+        strategy.updateToken(token);
+      }).finally(() => { this.refreshPromise = null; });
     }
+    await this.refreshPromise;
+    return true;
+  }
 
-    console.log(`  [Proxy] Sending request to ${url}`);
-    let response = await this.mockFetch(url, this._getOptions(options));
-
-    if (response.status === 401) {
-      if (!this.refreshPromise) {
-        this.refreshPromise = this.refresh().finally(() => this.refreshPromise = null);
-      }
-      await this.refreshPromise;
-
-      console.log(`  [Proxy] Resending request to ${url}...`);
-      response = await this.mockFetch(url, this._getOptions(options));
+  async request(request) {
+    if (this.refreshPromise) await this.refreshPromise;
+    let response = await this.client.request(this._withAuth(request));
+    if (response.status === 401 && this.refreshProvider) {
+      await this.refresh();
+      response = await this.client.request(this._withAuth(request));
     }
-
     return response;
   }
+}
 
-  async mockFetch(url, opts) {
-    return opts.headers.get('Authorization') === 'Bearer old_expired_token'
-      ? { status: 401, json: async () => ({ error: 'Unauthorized' }) }
-      : { status: 200, json: async () => ({ data: `Success from ${url}` }) };
+export class RateLimitProxy {
+  constructor(client, limitPerSecond = 5) {
+    checkClient(client);
+    if (!(Number.isFinite(limitPerSecond) && limitPerSecond > 0)) {
+      throw new RangeError('limitPerSecond must be positive');
+    }
+    this.client = client;
+    this.minInterval = 1000 / limitPerSecond;
+    this.nextTime = 0;
+    this.queue = Promise.resolve();
+  }
+
+  async request(request) {
+    const turn = this.queue.then(async () => {
+      const wait = Math.max(0, this.nextTime - Date.now());
+      if (wait) await new Promise(res => setTimeout(res, wait));
+      this.nextTime = Date.now() + this.minInterval;
+    });
+    this.queue = turn.catch(() => {});
+    await turn;
+    return this.client.request(request);
+  }
+}
+
+export class LoggingProxy {
+  constructor(client, logger = console) {
+    checkClient(client);
+    if (!logger || typeof logger.log !== 'function') {
+      throw new TypeError('logger must implement log()');
+    }
+    this.client = client;
+    this.logger = logger;
+  }
+
+  async request(request) {
+    // Never log Authorization headers or credentials.
+    this.logger.log(`[${new Date().toISOString()}] Request: ${request.method || 'GET'} ${request.url}`);
+    try {
+      const response = await this.client.request(request);
+      this.logger.log(`[${new Date().toISOString()}] Response: ${response.status}`);
+      return response;
+    } catch (err) {
+      this.logger.log(`[${new Date().toISOString()}] Error: ${err.message}`);
+      throw err;
+    }
   }
 }

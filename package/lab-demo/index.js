@@ -1,5 +1,5 @@
 import readline from 'readline';
-
+import { randomUUID } from 'node:crypto';
 import {
     fibonacciGenerator,
     consumeWithTimeout,
@@ -12,9 +12,16 @@ import {
     generateTelemetry,
     batchStream,
     runSmartHubSimulation,
-    ApiProxy,
+    BaseHttpClient,
+    AuthProxy,
+    RateLimitProxy,
+    LoggingProxy,
     JwtStrategy,
-    log
+    OAuthStrategy,
+    ApiKeyStrategy,
+    GitHubService,
+    log,
+    ConsoleLogger
 } from "lab-core";
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -217,21 +224,53 @@ function runLab7() {
 }
 
 async function runLab8() {
-  console.log("\n--- лабораторна 8: api proxy та rate limiter ---");
-  const api = new ApiProxy(new JwtStrategy('old_expired_token'), 2);
-  await Promise.all([api.request('/data/1'), api.request('/data/2')]);
+  console.log("\n--- лабораторна 8: auth proxy та dependency injection  ---");
+  const oldToken = randomUUID();
+  const newToken = randomUUID();
+  let requests = 0;
+  const mockfetch = async (url, options) => {
+    requests++;
+    const token = options.headers.get('Authorization');
+    return {
+      status: token === `Bearer ${oldToken}` ? 401 : 200,
+      json: async () => ({ url, requests })
+    };
+  }
+  const base = new BaseHttpClient(mockfetch);
+  const limited = new RateLimitProxy(base, 10);
+  const logged = new LoggingProxy(limited);
+  const auth = new AuthProxy(logged, 
+    new JwtStrategy(oldToken),
+   async () => newToken);
+  const github = new GitHubService(auth);
+  const response = await github.getUser('octocat');
+  console.log("JWT + refresh: ", response.status, "requests:", requests );
+  auth.setStrategy(new ApiKeyStrategy(randomUUID()));
+  console.log("API Key: ", (await github.getUser('octocat')).status);
+  auth.setStrategy(new OAuthStrategy(randomUUID()));
+  console.log("OAuth: ", (await github.getUser('octocat')).status);
 }
 
 async function runLab9() {
   console.log("\n--- лабораторна 9: декоратор логування ---");
-  class SimpleService {
-    calculate(a, b) { return a + b; }
-  }
-  const service = new SimpleService();
-  service.calculate = log({ level: "INFO", output: "console" })(service.calculate.bind(service), "calculate");
-  
-  console.log("   Виклик декорованого методу:");
-  await service.calculate(5, 10);
+const logger = new ConsoleLogger();
+const add = log({ level: 'INFO', logger })((a, b) => a + b, 'add');
+console.log("add(2, 3) =", add(2, 3));
+const multiply = log({ level: 'DEBUG', logger })(async (a, b) => a * b, 'multiply');
+console.log("async multiply(2, 3) =", await multiply(2, 3));
+const check = log({ level: 'ERROR', logger })(value => {
+  if (value < 0) throw new Error("Value must be positive");
+  return value;
+}, 'check');
+check(5);
+try {
+  check(-1);
+} catch (err) {
+  console.log("Caught error:", err.message);
+}
+const jsonLogger = { write: (message) => console.log("JSON log:", message)};
+const square = log({ level: 'INFO', logger: jsonLogger, json: true })((n) => n * n, 'square');
+console.log("square(5) =", square(5));
 }
 
 function showMenu() {
